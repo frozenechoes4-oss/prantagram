@@ -1,0 +1,1369 @@
+<!doctype html>
+<!--
+  =====================================================================
+   GROUP CHAT  -  one single HTML file  (put it on GitHub Pages)
+  =====================================================================
+   GitHub Pages can only host files, it cannot store accounts or
+   messages. So this page talks to a free Supabase project that keeps
+   the accounts, messages, photos, voice and videos for you.
+
+   SETUP (about 5 minutes, only once):
+     1. Make a free project at https://supabase.com
+     2. Supabase -> SQL Editor -> New query -> paste the SQL from the
+        "setupSql" block further down in this file (or just open this
+        page and it shows the SQL with a Copy button) -> Run.
+     3. Supabase -> Authentication -> Sign In / Providers -> Email ->
+        turn OFF "Confirm email" -> Save.
+     4. Supabase -> Project Settings -> API: copy the Project URL and the
+        Publishable key (also called anon key) into the two lines below.
+     5. Save this file as index.html, upload it to a GitHub repository,
+        then Settings -> Pages -> Deploy from branch (main, / root).
+
+   The URL and the publishable/anon key are MEANT to be public.
+   NEVER paste the "service_role" or "secret" key here.
+  =====================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Group Chat</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%AC%3C/text%3E%3C/svg%3E">
+
+<script>
+/* ============ EDIT THESE LINES (see setup steps above) ============ */
+window.CHAT_CONFIG = {
+  SUPABASE_URL: "https://pmxxllnyxxdxruldtbnh.supabase.co",      // e.g. https://abcdxyz.supabase.co
+  SUPABASE_KEY: "sb_publishable_AO04g_9phbbXB5GvygKWkA_0CgAZHVh",  // starts with sb_publishable_ (or the long anon key)
+  GROUP_NAME:   "Our Group Chat"
+};
+/* ================================================================== */
+</script>
+
+<style>
+:root{--bg:#eaeef3;--panel:#ffffff;--text:#1b2430;--muted:#6a7687;--line:#dde3ea;--accent:#2f6fed;--accent-d:#1f55c4;--me:#d8e6ff;--other:#ffffff;--danger:#d93a3a;--ok:#22a06b;--shadow:0 1px 3px rgba(20,30,50,.12);color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#0e131a;--panel:#171e28;--text:#e7ecf3;--muted:#8b97a9;--line:#263041;--accent:#5b8cff;--accent-d:#7aa0ff;--me:#1d3866;--other:#1f2835;--shadow:0 1px 3px rgba(0,0,0,.45)}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Bengali",sans-serif;background:var(--bg);color:var(--text);font-size:15px;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+input,textarea{font:inherit;color:var(--text)}
+a{color:var(--accent-d)}
+
+/* ---------- boot / sign in / setup ---------- */
+#boot{min-height:100%;display:grid;place-items:center;color:var(--muted)}
+.auth{min-height:100%;display:grid;place-items:center;padding:20px;background:linear-gradient(135deg,#2f6fed 0%,#7a4bd8 100%)}
+.card{width:100%;max-width:400px;background:var(--panel);border-radius:18px;padding:26px 22px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.card.wide{max-width:680px}
+.logo{font-size:42px;text-align:center}
+.card h1{margin:4px 0 2px;text-align:center;font-size:22px}
+.sub{margin:0 0 14px;text-align:center;color:var(--muted)}
+.tabs{display:flex;background:var(--bg);border-radius:12px;padding:4px;margin-bottom:12px}
+.tabs button{flex:1;border:0;background:none;padding:9px;border-radius:9px;font-weight:600;color:var(--muted)}
+.tabs button.on{background:var(--panel);color:var(--text);box-shadow:var(--shadow)}
+.card label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-top:10px}
+.card input{display:block;width:100%;margin-top:4px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:16px;outline:none}
+.card input:focus{border-color:var(--accent)}
+.regonly{display:none}
+body[data-mode=reg] .regonly{display:block}
+.err{color:var(--danger);font-size:13.5px;min-height:18px;margin:10px 0 0}
+.primary{width:100%;margin-top:8px;border:0;background:var(--accent);color:#fff;padding:12px;border-radius:10px;font-weight:700;font-size:16px}
+.primary:disabled{opacity:.6}
+.fine{color:var(--muted);font-size:12.5px;text-align:center;margin:10px 0 0}
+.steps{padding-left:20px;line-height:1.55}
+.steps li{margin-bottom:12px}
+#sqlBox{display:block;width:100%;height:170px;margin:8px 0;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+.small{width:auto;padding:8px 16px;margin:0}
+
+/* ---------- chat ---------- */
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:900px;margin:0 auto;background:var(--bg);position:relative}
+.top{display:flex;align-items:center;gap:10px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));background:var(--accent);color:#fff}
+.gav{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:20px;flex:none}
+.ttl{flex:1;min-width:0;display:flex;flex-direction:column}
+.ttl b{font-size:16.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ttl span{font-size:12.5px;opacity:.85}
+.ibtn{border:0;background:none;width:40px;height:40px;border-radius:50%;font-size:19px;flex:none}
+.top .ibtn:hover,.bar .ibtn:hover{background:rgba(127,127,127,.18)}
+#msgs{flex:1;overflow-y:auto;padding:10px 10px 14px;display:flex;flex-direction:column;overscroll-behavior:contain}
+.empty{margin:auto;text-align:center;color:var(--muted);white-space:pre-line}
+.day{text-align:center;margin:14px 0 6px}
+.day span{background:var(--panel);color:var(--muted);font-size:12px;padding:3px 11px;border-radius:99px;box-shadow:var(--shadow)}
+.msg{display:flex;align-items:flex-end;gap:7px;margin-top:2px}
+.msg.first{margin-top:10px}
+.msg.me{justify-content:flex-end}
+.av{width:32px;height:32px;flex:none;border-radius:50%;color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px}
+.av.ghost{visibility:hidden}
+.bub{max-width:min(80%,520px);background:var(--other);border-radius:15px;padding:6px 10px 4px;box-shadow:var(--shadow);min-width:0}
+.me .bub{background:var(--me)}
+.name{font-size:12.5px;font-weight:700;margin-bottom:2px}
+.txt{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.42}
+.txt a{color:var(--accent-d)}
+.meta{display:flex;gap:7px;justify-content:flex-end;align-items:center;font-size:11px;color:var(--muted);margin-top:2px}
+.del{border:0;background:none;padding:0;font-size:12px;opacity:.55}
+.del:hover{opacity:1}
+.pic{display:block;max-width:100%;max-height:340px;border-radius:10px;cursor:zoom-in;margin:2px 0 4px;min-width:140px;min-height:80px;background:var(--line);object-fit:cover}
+.vid{display:block;width:100%;max-width:360px;max-height:380px;border-radius:10px;background:#000;margin:2px 0 4px}
+.aud{min-width:230px}
+.aud .lbl{font-size:13px;color:var(--muted);margin-bottom:2px;overflow-wrap:anywhere}
+.aud audio{width:100%;height:40px;display:block}
+.gone .gtxt{color:var(--muted);font-style:italic}
+.prog{height:5px;border-radius:5px;background:var(--line);margin:6px 0 4px;overflow:hidden;min-width:180px}
+.prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
+#jump{position:absolute;right:14px;bottom:78px;width:42px;height:42px;border-radius:50%;border:0;background:var(--panel);color:var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:18px}
+
+.bar{display:flex;align-items:flex-end;gap:8px;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom));background:var(--panel);border-top:1px solid var(--line)}
+.bar textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:21px;padding:10px 15px;font-size:16px;background:var(--bg);max-height:140px;outline:none;line-height:1.35}
+.bar textarea:focus{border-color:var(--accent)}
+.send{width:42px;height:42px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:18px;flex:none}
+.send:disabled{opacity:.6}
+.attach{position:relative}
+#menu{position:absolute;bottom:50px;left:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.25);padding:6px;min-width:170px;z-index:5}
+#menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;border-radius:8px}
+#menu button:hover{background:var(--bg)}
+.rec{align-items:center}
+.rec .dot{width:11px;height:11px;border-radius:50%;background:var(--danger);animation:blink 1s infinite}
+.rec .grow{flex:1;color:var(--muted)}
+@keyframes blink{50%{opacity:.25}}
+
+/* ---------- side panel ---------- */
+#panel{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;justify-content:flex-end;z-index:20}
+.sheet{width:min(440px,100%);height:100%;background:var(--panel);display:flex;flex-direction:column}
+.shead{display:flex;align-items:center;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));border-bottom:1px solid var(--line);gap:6px}
+.shead .tabs{flex:1;margin:0}
+#pBody{flex:1;overflow-y:auto;padding:8px 12px 20px}
+.mem{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line)}
+.mem .who{flex:1;min-width:0}
+.mem .who b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mem .who small{color:var(--muted)}
+.dotg{width:10px;height:10px;border-radius:50%;background:var(--line);flex:none}
+.dotg.on{background:var(--ok)}
+.badge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;background:var(--accent);color:#fff;margin-left:6px;vertical-align:1px}
+.badge.red{background:var(--danger)}
+.ucard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:10px 0;font-size:13.5px;line-height:1.5}
+.ucard .row1{display:flex;align-items:center;gap:6px;font-size:15px}
+.ucard .row1 b{flex:1;min-width:0;overflow-wrap:anywhere}
+.ucard dl{margin:6px 0;display:grid;grid-template-columns:92px 1fr;gap:1px 8px}
+.ucard dt{color:var(--muted)}
+.ucard dd{margin:0;overflow-wrap:anywhere}
+.ucard button,.linkbtn{border:1px solid var(--line);background:var(--bg);padding:6px 12px;border-radius:8px}
+.ucard button.danger{color:var(--danger);border-color:var(--danger)}
+.dl{display:inline-block;margin:10px 0 0;color:var(--accent-d);font-weight:600;background:none;border:0;padding:0;text-decoration:underline}
+.pwrow{margin-top:18px;text-align:center}
+#viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);display:grid;place-items:center;z-index:30;cursor:zoom-out}
+#viewer img{max-width:96vw;max-height:94vh;border-radius:6px}
+#toast{position:fixed;left:50%;bottom:90px;transform:translate(-50%,20px);background:#222;color:#fff;padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:.2s;z-index:40;max-width:90vw;text-align:center;font-size:14px}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#toast.bad{background:var(--danger)}
+</style>
+</head>
+<body data-mode="login">
+
+<!-- ====================================================================
+     DATABASE SETUP SQL  -  paste into Supabase -> SQL Editor -> Run.
+     (The page also shows this with a Copy button until it is connected.)
+     ==================================================================== -->
+<script type="text/plain" id="setupSql">
+-- =====================================================================
+--  GROUP CHAT - DATABASE SETUP
+--  Run this ONCE in Supabase: SQL Editor -> New query -> paste -> Run.
+--  It is safe to run again later; it never deletes users or messages.
+-- =====================================================================
+
+-- ---------------------------- tables ---------------------------------
+-- public info about every member
+create table if not exists public.profiles (
+  id uuid primary key references auth.users (id) on delete cascade,
+  username text not null,
+  name text not null,
+  role text not null default 'member' check (role in ('member', 'admin')),
+  banned boolean not null default false,
+  joined_at timestamptz not null default now()
+);
+create unique index if not exists profiles_username_key on public.profiles (lower(username));
+
+-- private info (only the person and the admin can see their own row)
+create table if not exists public.user_private (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text not null,
+  phone text,
+  last_login_at timestamptz,
+  login_count integer not null default 0
+);
+
+-- small settings table (nobody can read it from the website)
+create table if not exists public.app_settings (
+  key text primary key,
+  value text not null
+);
+insert into public.app_settings (key, value) values ('invite_code', '') on conflict (key) do nothing;
+
+-- every message of the group chat
+create table if not exists public.messages (
+  id bigint generated always as identity primary key,
+  user_id uuid default auth.uid() references public.profiles (id) on delete set null,
+  kind text not null check (kind in ('text', 'image', 'video', 'audio')),
+  body text not null default '' check (char_length(body) <= 2000),
+  media_path text,
+  media_name text,
+  media_mime text,
+  media_size bigint,
+  media_dur integer,
+  voice boolean not null default false,
+  deleted boolean not null default false,
+  created_at timestamptz not null default now(),
+  constraint messages_shape check (
+    (kind = 'text' and media_path is null and char_length(btrim(body)) > 0)
+    or (kind <> 'text' and media_path is not null)
+  )
+);
+
+-- ----------------------- who is who (helpers) -------------------------
+create or replace function public.is_active() returns boolean
+language sql stable security definer set search_path = public as $f$
+  select exists (select 1 from public.profiles where id = auth.uid() and not banned);
+$f$;
+
+create or replace function public.is_admin() returns boolean
+language sql stable security definer set search_path = public as $f$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin' and not banned);
+$f$;
+
+-- ------------------------ 18+ link blocking ---------------------------
+create or replace function public.is_adult_host(host text) returns boolean
+language plpgsql immutable as $f$
+declare
+  d text; k text; p text; parts text[];
+  domains text[] := array[
+    'pornhub.com','xvideos.com','xnxx.com','xhamster.com','redtube.com','youporn.com',
+    'spankbang.com','brazzers.com','onlyfans.com','chaturbate.com','stripchat.com',
+    'livejasmin.com','bongacams.com','rule34.xxx','nhentai.net','e-hentai.org','hanime.tv',
+    'motherless.com','eporner.com','tnaflix.com','tube8.com','beeg.com','fapello.com',
+    'fansly.com','camsoda.com','myfreecams.com','cam4.com','erome.com','thothub.to',
+    'hqporner.com','txxx.com','hclips.com','tubegalore.com','daftsex.com','sxyprn.com',
+    'gelbooru.com','e621.net','literotica.com','fetlife.com','ashleymadison.com',
+    'adultfriendfinder.com','nudevista.com','xtube.com','drtuber.com','vporn.com','4tube.com',
+    'javhd.com','missav.com','jable.tv','hitomi.la','tsumino.com','fakku.net','f95zone.to',
+    'rule34.paheal.net','ixxx.com','tiava.com','xxnx.com','xvv1deos.com'];
+  kws text[] := array[
+    'porn','xvideo','xnxx','xhamster','redtube','youporn','spankbang','brazzers',
+    'onlyfans','chaturbate','stripchat','livejasmin','bongacams','rule34','hentai',
+    'nsfw','fansly','camsoda','myfreecams','nudevista','thothub','fapello','cumshot'];
+  toks text[] := array[
+    'sex','sexy','xxx','porn','porno','pornos','nude','nudes','erotic','erotica',
+    'hentai','nsfw','milf','fetish','bdsm','camgirl','camgirls'];
+  tlds text[] := array['xxx','porn','sex','adult'];
+begin
+  foreach d in array domains loop
+    if host = d or right(host, length(d) + 1) = '.' || d then return true; end if;
+  end loop;
+  foreach k in array kws loop
+    if position(k in host) > 0 then return true; end if;
+  end loop;
+  parts := regexp_split_to_array(host, '[.\-_]');
+  if parts[array_upper(parts, 1)] = any (tlds) then return true; end if;
+  foreach p in array parts loop
+    if p = any (toks) then return true; end if;
+  end loop;
+  return false;
+end
+$f$;
+
+create or replace function public.is_adult_path(rest text) returns boolean
+language plpgsql immutable as $f$
+declare k text;
+begin
+  if rest is null or rest = '' then return false; end if;
+  foreach k in array array['porn','hentai','nsfw','onlyfans','rule34','nudes'] loop
+    if position(k in rest) > 0 then return true; end if;
+  end loop;
+  return 'xxx' = any (regexp_split_to_array(rest, '[^a-z0-9]+'));
+end
+$f$;
+
+-- true when the text contains an 18+ link, a shortened link or a raw-IP link
+create or replace function public.is_banned_link(txt text) returns boolean
+language plpgsql immutable as $f$
+declare
+  t text; m text[]; raw text; x text; authority text; rest text; host text; s text; had_scheme boolean;
+  shorteners text[] := array[
+    'bit.ly','tinyurl.com','t.co','goo.gl','ow.ly','is.gd','buff.ly','cutt.ly','rebrand.ly',
+    'shorturl.at','tiny.cc','rb.gy','t.ly','lnkd.in','bl.ink','v.gd','x.co','adf.ly','shorte.st'];
+begin
+  if txt is null or txt = '' then return false; end if;
+  t := lower(normalize(txt, NFKC));
+  t := regexp_replace(t, '[​-‏⁠﻿­]', '', 'g');
+  t := regexp_replace(t, '[。．]', '.', 'g');
+  t := regexp_replace(t, '[(\[{]\s*(\.|dot)\s*[)\]}]', '.', 'g');
+  t := regexp_replace(t, 'hxxp', 'http', 'g');
+  for m in
+    select regexp_matches(t, $re$((?:[a-z][a-z0-9+.-]*://|www\.)[^\s<>"'`]+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24}(?::[0-9]+)?(?:/[^\s<>"'`]*)?)$re$, 'g')
+  loop
+    raw := m[1];
+    had_scheme := raw ~ '^[a-z][a-z0-9+.-]*://';
+    x := regexp_replace(raw, '^[a-z][a-z0-9+.-]*://', '');
+    authority := substring(x from '^[^/?#]*');
+    rest := substr(x, length(authority) + 1);
+    host := regexp_replace(authority, '^.*@', '');
+    host := regexp_replace(host, ':[0-9]*$', '');
+    host := regexp_replace(host, '\.+$', '');
+    host := regexp_replace(host, '^www[0-9]*\.', '');
+    if host = '' then continue; end if;
+    if had_scheme and host ~ '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' then return true; end if;
+    if public.is_adult_host(host) then return true; end if;
+    if public.is_adult_path(rest) then return true; end if;
+    foreach s in array shorteners loop
+      if host = s or right(host, length(s) + 1) = '.' || s then return true; end if;
+    end loop;
+  end loop;
+  return false;
+end
+$f$;
+
+-- ------------------------ account creation ----------------------------
+-- returns NULL when the sign-up details are fine, otherwise the problem
+create or replace function public.signup_problem(uname text, fname text, invite text) returns text
+language plpgsql stable security definer set search_path = public as $f$
+declare code text;
+begin
+  uname := btrim(coalesce(uname, ''));
+  fname := btrim(regexp_replace(coalesce(fname, ''), '\s+', ' ', 'g'));
+  select value into code from public.app_settings where key = 'invite_code';
+  if coalesce(btrim(code), '') <> '' and btrim(coalesce(invite, '')) <> btrim(code) then
+    return 'Wrong invite code.';
+  end if;
+  if char_length(fname) < 2 or char_length(fname) > 40 then
+    return 'Please enter your full name (2-40 characters).';
+  end if;
+  if uname !~ '^[A-Za-z0-9_.]{3,20}$' then
+    return 'Username must be 3-20 characters: letters, numbers, dot or underscore.';
+  end if;
+  if exists (select 1 from public.profiles where lower(username) = lower(uname)) then
+    return 'That username is already taken.';
+  end if;
+  if public.is_banned_link(fname || ' ' || uname) or public.is_adult_host(lower(uname)) then
+    return 'Please choose a different name or username.';
+  end if;
+  return null;
+end
+$f$;
+
+-- runs automatically when someone creates an account
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $f$
+declare
+  md jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  uname text := btrim(coalesce(md->>'username', ''));
+  fname text := btrim(regexp_replace(coalesce(md->>'name', ''), '\s+', ' ', 'g'));
+  problem text;
+begin
+  perform pg_advisory_xact_lock(748201);
+  problem := public.signup_problem(uname, fname, coalesce(md->>'invite', ''));
+  if problem is not null then raise exception '%', problem; end if;
+  insert into public.profiles (id, username, name, role)
+  values (new.id, uname, fname, case when exists (select 1 from public.profiles) then 'member' else 'admin' end);
+  insert into public.user_private (id, email, phone, last_login_at, login_count)
+  values (new.id, new.email, nullif(btrim(coalesce(md->>'phone', '')), ''), now(), 1);
+  return new;
+end
+$f$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- --------------------- checks on every new message --------------------
+create or replace function public.messages_guard() returns trigger
+language plpgsql security definer set search_path = public as $f$
+begin
+  if public.is_banned_link(new.body) or public.is_banned_link(coalesce(new.media_name, '')) then
+    raise exception 'Not sent: 18+ links (and shortened or raw-IP links) are banned in this group.';
+  end if;
+  if new.kind <> 'text' and (new.media_path is null or new.media_path not like new.user_id::text || '/%') then
+    raise exception 'Invalid media file.';
+  end if;
+  if (select count(*) from public.messages
+       where user_id = new.user_id and created_at > now() - interval '10 seconds') >= 12 then
+    raise exception 'You are sending too fast. Please wait a moment.';
+  end if;
+  return new;
+end
+$f$;
+
+drop trigger if exists messages_guard on public.messages;
+create trigger messages_guard before insert on public.messages
+  for each row execute function public.messages_guard();
+
+-- --------------------- functions the website calls --------------------
+create or replace function public.app_status() returns jsonb
+language sql stable security definer set search_path = public as $f$
+  select jsonb_build_object(
+    'ready', true,
+    'invite_required', coalesce((select value from public.app_settings where key = 'invite_code'), '') <> '',
+    'first_user', not exists (select 1 from public.profiles)
+  );
+$f$;
+
+-- lets people sign in with their username (looks up the email behind it)
+create or replace function public.login_email(uname text) returns text
+language sql stable security definer set search_path = public as $f$
+  select u.email from public.profiles p join public.user_private u on u.id = p.id
+  where lower(p.username) = lower(btrim(uname)) limit 1;
+$f$;
+
+create or replace function public.touch_login() returns void
+language sql security definer set search_path = public as $f$
+  update public.user_private set last_login_at = now(), login_count = login_count + 1 where id = auth.uid();
+$f$;
+
+create or replace function public.delete_message(mid bigint) returns void
+language plpgsql security definer set search_path = public as $f$
+declare owner uuid;
+begin
+  if not public.is_active() then raise exception 'Not allowed.'; end if;
+  select user_id into owner from public.messages where id = mid;
+  if not found then raise exception 'Message not found.'; end if;
+  if owner is distinct from auth.uid() and not public.is_admin() then
+    raise exception 'You can only delete your own messages.';
+  end if;
+  update public.messages set deleted = true where id = mid;
+end
+$f$;
+
+create or replace function public.admin_users() returns table (
+  id uuid, username text, name text, email text, phone text, role text, banned boolean,
+  joined_at timestamptz, last_login_at timestamptz, login_count integer, message_count bigint
+) language plpgsql security definer set search_path = public as $f$
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  return query
+    select p.id, p.username, p.name, u.email, u.phone, p.role, p.banned,
+           p.joined_at, u.last_login_at, u.login_count,
+           (select count(*) from public.messages m where m.user_id = p.id)
+    from public.profiles p join public.user_private u on u.id = p.id
+    order by p.joined_at;
+end
+$f$;
+
+create or replace function public.admin_set_banned(uid uuid, flag boolean) returns void
+language plpgsql security definer set search_path = public as $f$
+begin
+  if not public.is_admin() then raise exception 'Admins only.'; end if;
+  if uid = auth.uid() then raise exception 'You cannot suspend yourself.'; end if;
+  if exists (select 1 from public.profiles where id = uid and role = 'admin') then
+    raise exception 'Admins cannot be suspended.';
+  end if;
+  update public.profiles set banned = flag where id = uid;
+end
+$f$;
+
+-- --------------------------- access rules -----------------------------
+alter table public.profiles enable row level security;
+alter table public.user_private enable row level security;
+alter table public.messages enable row level security;
+alter table public.app_settings enable row level security;
+
+drop policy if exists "members read profiles" on public.profiles;
+create policy "members read profiles" on public.profiles for select to authenticated
+  using (id = auth.uid() or public.is_active());
+
+drop policy if exists "read own private info" on public.user_private;
+create policy "read own private info" on public.user_private for select to authenticated
+  using (id = auth.uid() or public.is_admin());
+
+drop policy if exists "members read messages" on public.messages;
+create policy "members read messages" on public.messages for select to authenticated
+  using (public.is_active());
+
+drop policy if exists "members send messages" on public.messages;
+create policy "members send messages" on public.messages for insert to authenticated
+  with check (user_id = auth.uid() and public.is_active());
+
+grant usage on schema public to anon, authenticated;
+revoke all on public.profiles, public.user_private, public.messages, public.app_settings from anon, authenticated;
+grant select on public.profiles, public.user_private to authenticated;
+grant select, insert on public.messages to authenticated;
+
+revoke execute on function public.app_status(), public.signup_problem(text, text, text), public.login_email(text),
+  public.touch_login(), public.delete_message(bigint), public.admin_users(),
+  public.admin_set_banned(uuid, boolean) from public, anon, authenticated;
+grant execute on function public.app_status(), public.signup_problem(text, text, text),
+  public.login_email(text) to anon, authenticated;
+grant execute on function public.touch_login(), public.delete_message(bigint), public.admin_users(),
+  public.admin_set_banned(uuid, boolean) to authenticated;
+
+-- ------------------- storage for photos, voice, videos ----------------
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('chat-media', 'chat-media', false, 52428800, array['image/*', 'video/*', 'audio/*'])
+on conflict (id) do update
+  set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "chat media upload" on storage.objects;
+create policy "chat media upload" on storage.objects for insert to authenticated
+  with check (bucket_id = 'chat-media' and public.is_active() and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "chat media read" on storage.objects;
+create policy "chat media read" on storage.objects for select to authenticated
+  using (bucket_id = 'chat-media' and public.is_active());
+
+drop policy if exists "chat media delete own" on storage.objects;
+create policy "chat media delete own" on storage.objects for delete to authenticated
+  using (bucket_id = 'chat-media' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- --------------------------- live updates -----------------------------
+do $f$
+begin
+  alter publication supabase_realtime add table public.messages;
+exception when duplicate_object then null;
+end
+$f$;
+
+-- ---------------------------------------------------------------------
+--  OPTIONAL (run separately whenever you like):
+--  * Require an invite code for new accounts (tell it to your friends):
+--      update public.app_settings set value = 'my-long-secret-code' where key = 'invite_code';
+--  * Turn the invite code off again:
+--      update public.app_settings set value = '' where key = 'invite_code';
+--  * Make another person an admin:
+--      update public.profiles set role = 'admin' where lower(username) = 'their_username';
+-- ---------------------------------------------------------------------
+</script>
+
+<div id="boot">Loading&hellip;</div>
+
+<div id="setup" class="auth" hidden>
+  <div class="card wide">
+    <div class="logo">&#128736;&#65039;</div>
+    <h1>One-time setup</h1>
+    <p class="sub" id="setupWhy"></p>
+    <ol class="steps">
+      <li><b>Make a free Supabase project</b> at <a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> (Start your project &rarr; New project). Choose any name and a database password, then wait about a minute.</li>
+      <li><b>Create the database.</b> In Supabase open <i>SQL Editor &rarr; New query</i>, paste the code below, press <i>Run</i>.
+        <textarea id="sqlBox" readonly spellcheck="false"></textarea>
+        <button type="button" class="primary small" id="copySql">Copy SQL</button>
+      </li>
+      <li><b>Turn off email confirmation.</b> Authentication &rarr; Sign In / Providers &rarr; Email &rarr; switch off <i>Confirm email</i> &rarr; Save.</li>
+      <li><b>Connect this page.</b> Supabase &rarr; Project Settings &rarr; API: copy the <i>Project URL</i> and the <i>Publishable key</i> (or <i>anon</i> key). Paste them into the two lines at the very top of this file (<code>CHAT_CONFIG</code>), save, and upload it to GitHub.</li>
+    </ol>
+    <p class="fine">Never paste the <i>service_role</i> / <i>secret</i> key into this file.</p>
+  </div>
+</div>
+
+<div id="auth" class="auth" hidden>
+  <form class="card" id="authForm">
+    <div class="logo">&#128172;</div>
+    <h1 id="gName">Group Chat</h1>
+    <p class="sub">Sign in to join the conversation</p>
+    <div class="tabs">
+      <button type="button" id="tabLogin" class="on">Sign in</button>
+      <button type="button" id="tabReg">Create account</button>
+    </div>
+    <div class="regonly"><label>Full name<input id="fName" maxlength="40" autocomplete="name"></label></div>
+    <label><span id="uLabel">Username or email</span><input id="fUser" maxlength="120" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username"></label>
+    <div class="regonly">
+      <label>Email<input id="fEmail" type="email" maxlength="120" autocomplete="email"></label>
+      <label>Phone (optional)<input id="fPhone" type="tel" maxlength="20" autocomplete="tel"></label>
+    </div>
+    <label>Password<input id="fPass" type="password" maxlength="100" autocomplete="current-password"></label>
+    <div class="regonly">
+      <label>Confirm password<input id="fPass2" type="password" maxlength="100" autocomplete="new-password"></label>
+      <label id="inviteRow" hidden>Invite code<input id="fInvite" maxlength="60" autocomplete="off"></label>
+    </div>
+    <div id="authErr" class="err" role="alert"></div>
+    <button class="primary" id="authBtn">Sign in</button>
+    <p class="fine" id="firstNote"></p>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="gav">&#128172;</div>
+    <div class="ttl"><b id="hName"></b><span id="hSub"></span></div>
+    <button class="ibtn" id="btnMembers" title="Members">&#128101;</button>
+    <button class="ibtn" id="btnLogout" title="Sign out">&#10162;</button>
+  </header>
+  <main id="msgs"></main>
+  <button id="jump" hidden title="Latest messages">&#8595;</button>
+
+  <footer class="bar" id="composer">
+    <div class="attach">
+      <button class="ibtn" id="btnPlus" title="Attach">&#10133;</button>
+      <div id="menu" hidden>
+        <button data-k="image">&#128247; Photo</button>
+        <button data-k="video">&#127916; Video</button>
+        <button data-k="audio">&#127925; Audio file</button>
+      </div>
+    </div>
+    <textarea id="txt" rows="1" maxlength="2000" placeholder="Type a message"></textarea>
+    <button class="send" id="btnSend" hidden title="Send">&#10148;</button>
+    <button class="send" id="btnMic" title="Record a voice message">&#127908;</button>
+  </footer>
+  <footer class="bar rec" id="recbar" hidden>
+    <button class="ibtn" id="recCancel" title="Cancel">&#128465;</button>
+    <span class="dot"></span><b id="recTime">0:00</b><span class="grow">Recording&hellip;</span>
+    <button class="send" id="recSend" title="Send voice message">&#10148;</button>
+  </footer>
+  <input type="file" id="fileIn" hidden>
+</div>
+
+<aside id="panel" hidden>
+  <div class="sheet">
+    <div class="shead"><div class="tabs" id="pTabs"></div><button class="ibtn" id="pClose" title="Close">&#10005;</button></div>
+    <div id="pBody"></div>
+  </div>
+</aside>
+<div id="viewer" hidden><img alt=""></div>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
+<script>
+(function(){
+'use strict';
+var CFG=window.CHAT_CONFIG||{};
+var GROUP=String(CFG.GROUP_NAME||'Our Group Chat').slice(0,60);
+var BUCKET='chat-media';
+var MB=1048576;
+var LIMITS={image:15*MB,audio:20*MB,video:50*MB};
+var MAX_TEXT=2000;
+var S={sb:null,me:null,status:null,profiles:{},members:[],byId:{},list:[],els:{},hasMore:false,chan:null,live:false,
+  online:[],lastId:0,loadingOlder:false,stick:true,sending:false,tab:'members',urls:{},chain:Promise.resolve(),timers:[]};
+
+function $(id){return document.getElementById(id);}
+function h(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
+var box=$('msgs');
+var coarse=!!(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches);
+
+function toast(msg,bad){var t=$('toast');t.textContent=msg;t.className='show'+(bad?' bad':'');clearTimeout(toast.t);toast.t=setTimeout(function(){t.className='';},4200);}
+function two(n){return n<10?'0'+n:''+n;}
+function fmtTime(ts){var d=new Date(ts);return two(d.getHours())+':'+two(d.getMinutes());}
+function fmtDate(ts){return ts?new Date(ts).toLocaleString([], {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'-';}
+function sameDay(a,b){var x=new Date(a),y=new Date(b);return x.getFullYear()===y.getFullYear()&&x.getMonth()===y.getMonth()&&x.getDate()===y.getDate();}
+function dayLabel(ts){
+  var n=new Date(),y=new Date(n.getFullYear(),n.getMonth(),n.getDate()-1);
+  if(sameDay(ts,n.getTime()))return 'Today';
+  if(sameDay(ts,y.getTime()))return 'Yesterday';
+  return new Date(ts).toLocaleDateString([], {weekday:'short',day:'numeric',month:'short',year:'numeric'});
+}
+function fmtDur(s){s=Math.round(s||0);return Math.floor(s/60)+':'+two(s%60);}
+function fmtSize(b){return b>=MB?(b/MB).toFixed(1)+' MB':Math.max(1,Math.round((b||0)/1024))+' KB';}
+function hue(name){var s=0,i;for(i=0;i<name.length;i++){s=(s*31+name.charCodeAt(i))|0;}return Math.abs(s)%360;}
+function initial(name){var a=Array.from(name||'?');return (a[0]||'?').toUpperCase();}
+function rand(n){var a=new Uint8Array(n),i,s='';(window.crypto||window.msCrypto).getRandomValues(a);for(i=0;i<n;i++)s+=('0'+a[i].toString(16)).slice(-2);return s;}
+
+function linkify(parent,text){
+  var re=/(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/gi,last=0,m;
+  while((m=re.exec(text))){
+    if(m.index>last)parent.appendChild(document.createTextNode(text.slice(last,m.index)));
+    var raw=m[0],trail='',tm=/[.,;:!?)\]}]+$/.exec(raw);
+    if(tm){trail=tm[0];raw=raw.slice(0,raw.length-trail.length);}
+    var a=h('a',null,raw);
+    a.href=/^www\./i.test(raw)?'https://'+raw:raw;
+    a.target='_blank';a.rel='noopener noreferrer nofollow';
+    parent.appendChild(a);
+    if(trail)parent.appendChild(document.createTextNode(trail));
+    last=m.index+m[0].length;
+  }
+  if(last<text.length)parent.appendChild(document.createTextNode(text.slice(last)));
+}
+
+/* ------------------------------------------------------------------
+   18+ link filter (friendly pre-check; the database enforces it too)
+   ------------------------------------------------------------------ */
+var ADULT_DOMAINS=['pornhub.com','xvideos.com','xnxx.com','xhamster.com','redtube.com','youporn.com','spankbang.com','brazzers.com','onlyfans.com','chaturbate.com','stripchat.com','livejasmin.com','bongacams.com','rule34.xxx','nhentai.net','e-hentai.org','hanime.tv','motherless.com','eporner.com','tnaflix.com','tube8.com','beeg.com','fapello.com','fansly.com','camsoda.com','myfreecams.com','cam4.com','erome.com','thothub.to','hqporner.com','txxx.com','hclips.com','tubegalore.com','daftsex.com','sxyprn.com','gelbooru.com','e621.net','literotica.com','fetlife.com','ashleymadison.com','adultfriendfinder.com','nudevista.com','xtube.com','drtuber.com','vporn.com','4tube.com','javhd.com','missav.com','jable.tv','hitomi.la','tsumino.com','fakku.net','f95zone.to','rule34.paheal.net','ixxx.com','tiava.com','xxnx.com','xvv1deos.com'];
+var ADULT_KEYWORDS=['porn','xvideo','xnxx','xhamster','redtube','youporn','spankbang','brazzers','onlyfans','chaturbate','stripchat','livejasmin','bongacams','rule34','hentai','nsfw','fansly','camsoda','myfreecams','nudevista','thothub','fapello','cumshot'];
+var ADULT_TOKENS=['sex','sexy','xxx','porn','porno','pornos','nude','nudes','erotic','erotica','hentai','nsfw','milf','fetish','bdsm','camgirl','camgirls'];
+var ADULT_TLDS=['xxx','porn','sex','adult'];
+var PATH_KEYWORDS=['porn','hentai','nsfw','onlyfans','rule34','nudes'];
+var SHORTENERS=['bit.ly','tinyurl.com','t.co','goo.gl','ow.ly','is.gd','buff.ly','cutt.ly','rebrand.ly','shorturl.at','tiny.cc','rb.gy','t.ly','lnkd.in','bl.ink','v.gd','x.co','adf.ly','shorte.st'];
+var URL_RE=/(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>"'`]+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24}(?::\d+)?(?:\/[^\s<>"'`]*)?/g;
+function endsWithDomain(host,d){return host===d||host.slice(-(d.length+1))==='.'+d;}
+function normalizeForLinks(text){
+  var t=String(text).normalize('NFKC').toLowerCase();
+  t=t.replace(/[​-‏⁠﻿­]/g,'');
+  t=t.replace(/[。．]/g,'.');
+  t=t.replace(/[(\[{]\s*(?:\.|dot)\s*[)\]}]/g,'.');
+  t=t.replace(/hxxp/g,'http');
+  return t;
+}
+function hostOf(raw){
+  var x=raw.replace(/^[a-z][a-z0-9+.-]*:\/\//,'');
+  var cut=x.search(/[\/?#]/);
+  var authority=cut<0?x:x.slice(0,cut),rest=cut<0?'':x.slice(cut);
+  var host=authority.replace(/^.*@/,'').replace(/:\d*$/,'').replace(/\.+$/,'').replace(/^www\d*\./,'');
+  return {host:host,rest:rest};
+}
+function isAdultHost(host){
+  var i,parts;
+  for(i=0;i<ADULT_DOMAINS.length;i++)if(endsWithDomain(host,ADULT_DOMAINS[i]))return true;
+  for(i=0;i<ADULT_KEYWORDS.length;i++)if(host.indexOf(ADULT_KEYWORDS[i])>=0)return true;
+  parts=host.split(/[.\-_]/);
+  if(ADULT_TLDS.indexOf(parts[parts.length-1])>=0)return true;
+  for(i=0;i<parts.length;i++)if(ADULT_TOKENS.indexOf(parts[i])>=0)return true;
+  return false;
+}
+function isAdultPath(rest){
+  var i;if(!rest)return false;
+  for(i=0;i<PATH_KEYWORDS.length;i++)if(rest.indexOf(PATH_KEYWORDS[i])>=0)return true;
+  return rest.split(/[^a-z0-9]+/).indexOf('xxx')>=0;
+}
+function checkText(text){
+  if(!text)return {ok:true};
+  var found=normalizeForLinks(text).match(URL_RE)||[],i,j;
+  for(i=0;i<found.length;i++){
+    var raw=found[i],hadScheme=/^[a-z][a-z0-9+.-]*:\/\//.test(raw),p=hostOf(raw);
+    if(!p.host)continue;
+    if(hadScheme&&/^\d{1,3}(\.\d{1,3}){3}$/.test(p.host))return {ok:false,error:'Links to raw IP addresses are not allowed in this group.'};
+    if(isAdultHost(p.host)||isAdultPath(p.rest))return {ok:false,error:'Not sent: 18+ links are banned in this group.'};
+    for(j=0;j<SHORTENERS.length;j++)if(endsWithDomain(p.host,SHORTENERS[j]))return {ok:false,error:'Not sent: shortened links are not allowed because they can hide 18+ sites.'};
+  }
+  return {ok:true};
+}
+
+/* ------------------------------------------------------------------
+   Friendly error messages
+   ------------------------------------------------------------------ */
+function friendly(e){
+  var m=String((e&&e.message)||e||''),c=e&&e.code;
+  if(/Not sent|too fast|banned in this group|can only delete|Admins only|cannot suspend|Admins cannot|Message not found|Wrong invite|Username must|full name|already taken|different name/i.test(m))return m;
+  if(c==='42501'||/row-level security|permission denied/i.test(m))return 'You are not allowed to do that. Your account may be suspended.';
+  if(/invalid login/i.test(m))return 'Wrong username or password.';
+  if(/already (been )?registered|already exists/i.test(m))return 'An account with that email already exists. Try signing in.';
+  if(/not confirmed/i.test(m))return 'Your email is not confirmed. Ask the group admin to switch off "Confirm email" in Supabase.';
+  if(/database error saving new user/i.test(m))return 'Could not create the account. Check the invite code and username, then try again.';
+  if(/rate limit|too many|over_email_send_rate/i.test(m))return 'Too many attempts. Please wait a few minutes and try again.';
+  if(/failed to fetch|networkerror|network request|load failed/i.test(m))return 'Cannot reach the server. Check your internet connection.';
+  if(/password/i.test(m))return m;
+  return m||'Something went wrong.';
+}
+function isMissingFn(e){return e&&(e.code==='PGRST202'||e.code==='PGRST205'||e.code==='42883'||e.code==='42P01'||/could not find the function|schema cache/i.test(e.message||''));}
+
+/* ------------------------------------------------------------------
+   Screens
+   ------------------------------------------------------------------ */
+function hideAll(){['boot','setup','auth','app','panel'].forEach(function(id){$(id).hidden=true;});}
+function showSetup(why){
+  hideAll();$('setup').hidden=false;
+  $('setupWhy').textContent=why==='sql'?'Connected to Supabase, but the database is not created yet. Do step 2, then refresh this page.':'This page is not connected to a database yet. Follow these 4 steps, then refresh.';
+  $('sqlBox').value=document.getElementById('setupSql').textContent.trim();
+}
+function fatal(msg){hideAll();$('boot').hidden=false;$('boot').textContent=msg;}
+$('copySql').onclick=function(){
+  var box2=$('sqlBox');box2.focus();box2.select();
+  var done=function(){toast('SQL copied. Paste it into the Supabase SQL Editor.');};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(box2.value).then(done,function(){try{document.execCommand('copy');done();}catch(e){}});}
+  else{try{document.execCommand('copy');done();}catch(e){}}
+};
+
+function stopLive(){
+  S.timers.forEach(clearInterval);S.timers=[];
+  if(S.chan&&S.sb){try{S.sb.removeChannel(S.chan);}catch(e){}}
+  S.chan=null;S.live=false;
+}
+function showAuth(msg){
+  stopLive();S.me=null;
+  hideAll();$('auth').hidden=false;
+  var first=!!(S.status&&S.status.first_user);
+  setMode(first?'reg':'login');
+  $('authErr').textContent=msg||'';
+  $('fPass').value='';$('fPass2').value='';
+  $('inviteRow').hidden=!(S.status&&S.status.invite_required);
+  $('firstNote').textContent=first?'You are the first person here, so your account will be the group admin.':'';
+}
+
+/* ---------------- sign in / create account ---------------- */
+var mode='login';
+function setMode(m){
+  mode=m;document.body.setAttribute('data-mode',m);
+  $('tabLogin').className=m==='login'?'on':'';
+  $('tabReg').className=m==='reg'?'on':'';
+  $('authBtn').textContent=m==='login'?'Sign in':'Create account';
+  $('uLabel').textContent=m==='login'?'Username or email':'Choose a username';
+  $('fPass').setAttribute('autocomplete',m==='login'?'current-password':'new-password');
+  $('authErr').textContent='';
+}
+$('tabLogin').onclick=function(){setMode('login');};
+$('tabReg').onclick=function(){setMode('reg');};
+
+$('authForm').addEventListener('submit',async function(e){
+  e.preventDefault();
+  var err=$('authErr');err.textContent='';$('authBtn').disabled=true;
+  try{if(mode==='login')await doLogin();else await doRegister();}
+  catch(ex){err.textContent=friendly(ex);}
+  $('authBtn').disabled=false;
+});
+
+async function doLogin(){
+  var id=$('fUser').value.trim(),pw=$('fPass').value;
+  if(!id||!pw)throw new Error('Please enter your username and password.');
+  var email=id;
+  if(id.indexOf('@')<0){
+    var r=await S.sb.rpc('login_email',{uname:id});
+    if(r.error)throw r.error;
+    if(!r.data)throw new Error('Wrong username or password.');
+    email=r.data;
+  }
+  var s=await S.sb.auth.signInWithPassword({email:email,password:pw});
+  if(s.error)throw s.error;
+  await enterApp(true);
+}
+
+async function doRegister(){
+  var name=$('fName').value.replace(/\s+/g,' ').trim(),username=$('fUser').value.trim(),email=$('fEmail').value.trim().toLowerCase();
+  var phone=$('fPhone').value.trim(),pw=$('fPass').value,invite=$('fInvite').value.trim();
+  if(name.length<2||name.length>40)throw new Error('Please enter your full name (2-40 characters).');
+  if(!/^[A-Za-z0-9_.]{3,20}$/.test(username))throw new Error('Username must be 3-20 characters: letters, numbers, dot or underscore.');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))throw new Error('Please enter a valid email address.');
+  if(phone&&!/^[+0-9()\s-]{6,20}$/.test(phone))throw new Error('Phone number looks invalid.');
+  if(pw.length<6)throw new Error('Password must be at least 6 characters.');
+  if(pw!==$('fPass2').value)throw new Error('The two passwords do not match.');
+  var pre=await S.sb.rpc('signup_problem',{uname:username,fname:name,invite:invite});
+  if(pre.error)throw pre.error;
+  if(pre.data)throw new Error(pre.data);
+  var r=await S.sb.auth.signUp({email:email,password:pw,options:{data:{username:username,name:name,phone:phone,invite:invite}}});
+  if(r.error)throw r.error;
+  if(!r.data.session){
+    setMode('login');$('fUser').value=username;$('fPass').value='';
+    $('authErr').textContent='Account created. Please confirm your email address (check your inbox), then sign in.';
+    return;
+  }
+  await enterApp(false);
+}
+
+/* ---------------- app start ---------------- */
+async function fetchMe(){
+  var s=await S.sb.auth.getSession();
+  var user=s.data&&s.data.session&&s.data.session.user;
+  if(!user)return null;
+  var r=await S.sb.from('profiles').select('id,username,name,role,banned,joined_at').eq('id',user.id).maybeSingle();
+  if(r.error)throw r.error;
+  if(!r.data)return null;
+  r.data.email=user.email;
+  return r.data;
+}
+async function enterApp(fresh){
+  var me=await fetchMe();
+  if(!me){await S.sb.auth.signOut();showAuth('Your profile was not found. Please create an account.');return;}
+  if(me.banned){await S.sb.auth.signOut();showAuth('This account has been suspended by the admin.');return;}
+  S.me=me;S.profiles[me.id]=me;
+  if(S.status)S.status.first_user=false;
+  hideAll();$('app').hidden=false;
+  $('hName').textContent=GROUP;document.title=GROUP;
+  $('fPass').value='';$('fPass2').value='';
+  S.byId={};S.list=[];S.els={};S.lastId=0;S.urls={};S.online=[];
+  if(fresh)S.sb.rpc('touch_login').then(function(){},function(){});
+  loadMembers();
+  await loadLatest();
+  connectRealtime();
+  S.timers.push(setInterval(slowPoll,20000));
+}
+
+function updateSub(){
+  var n=S.members.length,o=S.online.length;
+  $('hSub').textContent=n+' member'+(n===1?'':'s')+' • '+o+' online';
+}
+async function loadMembers(){
+  var r=await S.sb.from('profiles').select('id,username,name,role,banned,joined_at').order('name');
+  if(r.error||!r.data)return;
+  r.data.forEach(function(p){S.profiles[p.id]=Object.assign(S.profiles[p.id]||{},p);});
+  S.members=r.data.filter(function(p){return !p.banned;});
+  updateSub();
+  if(!$('panel').hidden&&S.tab==='members')renderPanel();
+}
+async function ensureProfiles(uids){
+  var need=[];
+  uids.forEach(function(u){if(u&&!S.profiles[u]&&need.indexOf(u)<0)need.push(u);});
+  if(!need.length)return;
+  var r=await S.sb.from('profiles').select('id,username,name,role,banned,joined_at').in('id',need);
+  if(r.data)r.data.forEach(function(p){S.profiles[p.id]=p;});
+  need.forEach(function(u){if(!S.profiles[u])S.profiles[u]={id:u,username:'unknown',name:'Unknown member',role:'member'};});
+  loadMembers();
+}
+function who(uid){return S.profiles[uid]||{name:'Unknown member',username:'unknown'};}
+
+/* ---------------- messages: loading ---------------- */
+function toMsg(r){
+  var m={id:r.id,ts:Date.parse(r.created_at),uid:r.user_id,type:r.deleted?'deleted':r.kind,text:r.deleted?'':(r.body||'')};
+  if(!r.deleted&&r.media_path)m.media={path:r.media_path,mime:r.media_mime,size:r.media_size,name:r.media_name,dur:r.media_dur,voice:!!r.voice,url:''};
+  return m;
+}
+async function ensureUrls(msgs){
+  var need=[],seen={},now=Date.now();
+  msgs.forEach(function(m){
+    if(!m.media)return;
+    var c=S.urls[m.media.path];
+    if(c&&c.exp>now+3600e3){m.media.url=c.url;return;}
+    if(!seen[m.media.path]){seen[m.media.path]=1;need.push(m.media.path);}
+  });
+  if(!need.length)return;
+  var r=await S.sb.storage.from(BUCKET).createSignedUrls(need,86400);
+  if(r.error||!r.data)return;
+  r.data.forEach(function(x){if(x&&x.signedUrl)S.urls[x.path]={url:x.signedUrl,exp:now+86400e3};});
+  msgs.forEach(function(m){if(m.media&&S.urls[m.media.path])m.media.url=S.urls[m.media.path].url;});
+}
+async function prepare(rows){
+  var msgs=rows.map(toMsg);
+  await ensureProfiles(msgs.map(function(m){return m.uid;}));
+  await ensureUrls(msgs);
+  return msgs;
+}
+async function loadLatest(){
+  var r=await S.sb.from('messages').select('*').order('id',{ascending:false}).limit(61);
+  if(r.error){toast(friendly(r.error),true);return;}
+  var rows=r.data.slice().reverse();
+  S.hasMore=rows.length>60;
+  if(S.hasMore)rows=rows.slice(1);
+  var msgs=await prepare(rows);
+  msgs.forEach(function(m){S.byId[m.id]=m;S.list.push(m);S.lastId=Math.max(S.lastId,m.id);});
+  renderAll();scrollBottom();
+}
+async function loadOlder(){
+  if(S.loadingOlder||!S.list.length)return;
+  S.loadingOlder=true;
+  try{
+    var r=await S.sb.from('messages').select('*').lt('id',S.list[0].id).order('id',{ascending:false}).limit(51);
+    if(r.error||!r.data)return;
+    var rows=r.data.slice().reverse();
+    S.hasMore=rows.length>50;
+    if(S.hasMore)rows=rows.slice(1);
+    var msgs=(await prepare(rows)).filter(function(m){return !S.byId[m.id];});
+    var prevH=box.scrollHeight,prevTop=box.scrollTop;
+    msgs.forEach(function(m){S.byId[m.id]=m;});
+    S.list=msgs.concat(S.list);
+    S.stick=false;renderAll();
+    box.scrollTop=box.scrollHeight-prevH+prevTop;
+  }catch(e){}
+  S.loadingOlder=false;
+}
+function queueRow(row){
+  S.chain=S.chain.then(async function(){
+    if(S.byId[row.id]||!S.me)return;
+    var m=(await prepare([row]))[0];
+    addMessage(m);
+  }).catch(function(){});
+}
+async function catchUp(){
+  if(!S.me)return;
+  var r=await S.sb.from('messages').select('*').gt('id',S.lastId).order('id',{ascending:true}).limit(200);
+  if(r.error||!r.data)return;
+  r.data.forEach(queueRow);
+}
+async function slowPoll(){
+  if(!S.me)return;
+  catchUp();
+  try{
+    var r=await S.sb.from('profiles').select('banned').eq('id',S.me.id).maybeSingle();
+    if(r.error&&(r.error.status===401||/jwt/i.test(r.error.message||'')))showAuth('Your session ended. Please sign in again.');
+    else if(r.data&&r.data.banned){S.sb.auth.signOut();showAuth('Your account has been suspended by the admin.');}
+  }catch(e){}
+}
+
+/* ---------------- live updates (realtime + presence) ---------------- */
+function connectRealtime(){
+  var ch=S.sb.channel('group-chat-room',{config:{presence:{key:S.me.id}}});
+  S.chan=ch;
+  ch.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},function(p){queueRow(p.new);});
+  ch.on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'},function(p){if(p.new&&p.new.deleted)applyDelete(p.new.id);});
+  ch.on('presence',{event:'sync'},function(){
+    S.online=Object.keys(ch.presenceState());
+    var unknown=S.online.some(function(id){return !S.profiles[id];});
+    if(unknown)loadMembers();
+    updateSub();
+    if(!$('panel').hidden&&S.tab==='members')renderPanel();
+  });
+  ch.subscribe(function(status){
+    S.live=(status==='SUBSCRIBED');
+    if(S.live){ch.track({at:Date.now()});catchUp();}
+  });
+  S.timers.push(setInterval(function(){if(!S.live)catchUp();},5000));
+}
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&S.me)catchUp();});
+
+/* ---------------- messages: drawing ---------------- */
+function isNearBottom(){return box.scrollHeight-box.scrollTop-box.clientHeight<140;}
+function scrollBottom(){box.scrollTop=box.scrollHeight;S.stick=true;$('jump').hidden=true;}
+box.addEventListener('scroll',function(){
+  S.stick=isNearBottom();$('jump').hidden=S.stick;
+  if(box.scrollTop<60&&S.hasMore&&!S.loadingOlder&&S.list.length)loadOlder();
+});
+$('jump').onclick=scrollBottom;
+
+function buildItems(m,prev){
+  var out=[];
+  var newDay=!prev||!sameDay(prev.ts,m.ts);
+  if(newDay){var d=h('div','day');d.appendChild(h('span',null,dayLabel(m.ts)));out.push(d);}
+  var first=newDay||prev.uid!==m.uid||m.ts-prev.ts>5*60000;
+  var el=buildMsg(m,first);
+  S.els[m.id]=el;out.push(el);
+  return out;
+}
+
+function buildMsg(m,first){
+  var isMe=m.uid===S.me.id,u=who(m.uid);
+  var row=h('div','msg'+(isMe?' me':'')+(first?' first':''));
+  var hu=hue(u.username||'');
+  if(!isMe){
+    var av=h('div','av'+(first?'':' ghost'),first?initial(u.name):'');
+    if(first)av.style.background='hsl('+hu+',55%,46%)';
+    row.appendChild(av);
+  }
+  var b=h('div','bub');
+  if(!isMe&&first){var nm=h('div','name',u.name);nm.style.color='hsl('+hu+',60%,42%)';b.appendChild(nm);}
+  if(m.type==='deleted'){
+    b.className+=' gone';b.appendChild(h('div','gtxt','This message was deleted'));
+  }else{
+    var md=m.media;
+    if(md&&!md.url){b.appendChild(h('div','gtxt','Media is not available right now.'));}
+    else if(m.type==='image'&&md){
+      var img=h('img','pic');img.loading='lazy';img.alt=md.name||'photo';img.src=md.url;
+      img.addEventListener('load',function(){if(S.stick)box.scrollTop=box.scrollHeight;});
+      img.addEventListener('click',function(){openViewer(md.url);});
+      b.appendChild(img);
+    }else if(m.type==='video'&&md){
+      var v=document.createElement('video');v.className='vid';v.controls=true;v.preload='metadata';v.setAttribute('playsinline','');v.src=md.url;
+      v.addEventListener('loadedmetadata',function(){if(S.stick)box.scrollTop=box.scrollHeight;});
+      b.appendChild(v);
+    }else if(m.type==='audio'&&md){
+      var w=h('div','aud');
+      w.appendChild(h('div','lbl',md.voice?('Voice message • '+fmtDur(md.dur)):((md.name||'Audio')+' • '+fmtSize(md.size))));
+      var au=document.createElement('audio');au.controls=true;au.preload='metadata';au.src=md.url;
+      w.appendChild(au);b.appendChild(w);
+    }
+    if(m.text){var t=h('div','txt');linkify(t,m.text);b.appendChild(t);}
+  }
+  var meta=h('div','meta');meta.appendChild(h('span',null,fmtTime(m.ts)));
+  if(m.type!=='deleted'&&(isMe||S.me.role==='admin')){
+    var del=h('button','del','🗑');del.title='Delete';
+    del.addEventListener('click',function(){
+      if(!confirm('Delete this message for everyone?'))return;
+      S.sb.rpc('delete_message',{mid:m.id}).then(function(r){
+        if(r.error)toast(friendly(r.error),true);else applyDelete(m.id);
+      });
+    });
+    meta.appendChild(del);
+  }
+  b.appendChild(meta);row.appendChild(b);
+  return row;
+}
+
+function renderAll(){
+  box.textContent='';S.els={};
+  if(!S.list.length){box.appendChild(h('div','empty','No messages yet.\nSay hello 👋'));return;}
+  var prev=null;
+  S.list.forEach(function(m){buildItems(m,prev).forEach(function(e){box.appendChild(e);});prev=m;});
+}
+
+function addMessage(m){
+  if(S.byId[m.id])return;
+  var stick=isNearBottom()||m.uid===S.me.id;
+  var prev=S.list.length?S.list[S.list.length-1]:null;
+  var emptyEl=box.querySelector('.empty');if(emptyEl)emptyEl.remove();
+  S.byId[m.id]=m;S.list.push(m);S.lastId=Math.max(S.lastId,m.id);
+  buildItems(m,prev).forEach(function(e){box.appendChild(e);});
+  if(stick)scrollBottom();else $('jump').hidden=false;
+}
+
+function applyDelete(id){
+  var m=S.byId[id];if(!m||m.type==='deleted')return;
+  m.type='deleted';m.text='';m.media=null;
+  var old=S.els[id];if(!old)return;
+  var neu=buildMsg(m,old.classList.contains('first'));
+  old.parentNode.replaceChild(neu,old);S.els[id]=neu;
+}
+
+/* ---------------- sending text ---------------- */
+var ta=$('txt');
+function autosize(){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,140)+'px';}
+function toggleSend(){var has=ta.value.trim().length>0;$('btnSend').hidden=!has;$('btnMic').hidden=has;}
+ta.addEventListener('input',function(){autosize();toggleSend();});
+ta.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&!coarse){e.preventDefault();sendText();}});
+$('btnSend').onclick=sendText;
+
+async function afterSendError(e){
+  toast(friendly(e),true);
+  if(e&&(e.code==='42501'||e.status===401||e.status===403)){
+    var r=await S.sb.from('profiles').select('banned').eq('id',S.me.id).maybeSingle();
+    if(r.data&&r.data.banned){S.sb.auth.signOut();showAuth('Your account has been suspended by the admin.');}
+    else if(r.error&&r.error.status===401)showAuth('Your session ended. Please sign in again.');
+  }
+}
+async function sendText(){
+  var text=ta.value.replace(/\r\n/g,'\n').trim();
+  if(!text||S.sending)return;
+  if(text.length>MAX_TEXT){toast('Message is too long (max '+MAX_TEXT+' characters).',true);return;}
+  var chk=checkText(text);
+  if(!chk.ok){toast(chk.error,true);return;}
+  S.sending=true;$('btnSend').disabled=true;
+  try{
+    var r=await S.sb.from('messages').insert({kind:'text',body:text}).select().single();
+    if(r.error)throw r.error;
+    ta.value='';autosize();toggleSend();
+    queueRow(r.data);
+  }catch(e){await afterSendError(e);}
+  S.sending=false;$('btnSend').disabled=false;ta.focus();
+}
+
+/* ---------------- photos, videos, audio files ---------------- */
+$('btnPlus').onclick=function(e){e.stopPropagation();$('menu').hidden=!$('menu').hidden;};
+document.addEventListener('click',function(){$('menu').hidden=true;});
+Array.prototype.forEach.call($('menu').querySelectorAll('button'),function(b){
+  b.onclick=function(){
+    var k=b.getAttribute('data-k');
+    $('fileIn').setAttribute('accept',k+'/*');$('fileIn').setAttribute('data-k',k);
+    $('fileIn').value='';$('fileIn').click();
+  };
+});
+$('fileIn').addEventListener('change',function(){
+  var f=this.files&&this.files[0];if(!f)return;
+  uploadFile(f,this.getAttribute('data-k'),{});
+  this.value='';
+});
+
+function addPending(kind,name){
+  var row=h('div','msg me first'),b=h('div','bub');
+  b.appendChild(h('div','txt','Uploading '+(kind==='image'?'photo':kind==='video'?'video':'audio')+(name&&name!=='voice-message'?' • '+name:'')+'…'));
+  var pr=h('div','prog'),bar=document.createElement('i');pr.appendChild(bar);b.appendChild(pr);
+  row.appendChild(b);box.appendChild(row);scrollBottom();
+  return {set:function(p){bar.style.width=p+'%';},remove:function(){row.remove();}};
+}
+
+async function shrinkImage(file){
+  if(file.type==='image/gif'||file.size<350*1024)return file;
+  try{
+    var src,w,hgt;
+    if(window.createImageBitmap){src=await createImageBitmap(file);w=src.width;hgt=src.height;}
+    else{
+      src=await new Promise(function(res,rej){var im=new Image(),u=URL.createObjectURL(file);im.onload=function(){URL.revokeObjectURL(u);res(im);};im.onerror=rej;im.src=u;});
+      w=src.naturalWidth;hgt=src.naturalHeight;
+    }
+    var scale=Math.min(1,1600/Math.max(w,hgt));
+    var c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*scale));c.height=Math.max(1,Math.round(hgt*scale));
+    var cx=c.getContext('2d');cx.fillStyle='#fff';cx.fillRect(0,0,c.width,c.height);cx.drawImage(src,0,0,c.width,c.height);
+    var blob=await new Promise(function(res){c.toBlob(res,'image/jpeg',0.82);});
+    if(blob&&blob.size<file.size){blob.name=(file.name||'photo').replace(/\.[^.]+$/,'')+'.jpg';return blob;}
+  }catch(e){}
+  return file;
+}
+var EXT={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp','image/avif':'avif','image/heic':'heic','audio/webm':'weba','audio/mp4':'m4a','audio/mpeg':'mp3','audio/ogg':'ogg','audio/wav':'wav','audio/x-wav':'wav','audio/flac':'flac','audio/aac':'aac','video/mp4':'mp4','video/quicktime':'mov','video/webm':'webm','video/ogg':'ogv'};
+function cleanName(n){return String(n||'file').replace(/[\x00-\x1f\\\/<>:"|?*]+/g,'_').slice(0,80);}
+
+function xhrUpload(path,blob,mime,onp){
+  return S.sb.auth.getSession().then(function(r){
+    var tok=r.data&&r.data.session&&r.data.session.access_token;
+    if(!tok)throw new Error('Please sign in again.');
+    return new Promise(function(resolve,reject){
+      var fd=new FormData();fd.append('cacheControl','86400');fd.append('',new Blob([blob],{type:mime}));
+      var x=new XMLHttpRequest();
+      x.open('POST',CFG.SUPABASE_URL.replace(/\/+$/,'')+'/storage/v1/object/'+BUCKET+'/'+path);
+      x.setRequestHeader('Authorization','Bearer '+tok);
+      x.setRequestHeader('apikey',CFG.SUPABASE_KEY);
+      x.setRequestHeader('x-upsert','false');
+      x.upload.onprogress=function(e){if(e.lengthComputable)onp(Math.round(e.loaded*100/e.total));};
+      x.onload=function(){
+        if(x.status>=200&&x.status<300){resolve();return;}
+        var j={};try{j=JSON.parse(x.responseText);}catch(e){}
+        var msg=j.message||j.error||'';
+        if(x.status===413||/exceeded|too large|maximum allowed/i.test(msg))msg='That file is too big for this chat (max 50 MB).';
+        else if(/mime|not supported/i.test(msg))msg='That file type is not supported.';
+        else if(x.status===401||x.status===403)msg='You are not allowed to upload. Please sign in again.';
+        reject(new Error(msg||'Upload failed ('+x.status+').'));
+      };
+      x.onerror=function(){reject(new Error('Upload failed. Check your connection.'));};
+      x.send(fd);
+    });
+  });
+}
+
+async function uploadFile(file,kind,opts){
+  var limit=LIMITS[kind];
+  if(!limit){toast('Unsupported file type.',true);return;}
+  if(file.size>limit){toast('That file is too big (max '+Math.round(limit/MB)+' MB).',true);return;}
+  var caption=opts.voice?'':ta.value.trim().slice(0,500);
+  var origName=cleanName(file.name||'file');
+  var chk=checkText(caption+' '+origName);
+  if(!chk.ok){toast(chk.error,true);return;}
+  var p=addPending(kind,origName);
+  var path='';
+  try{
+    if(kind==='image')file=await shrinkImage(file);
+    var mime=String(file.type||'').split(';')[0].toLowerCase();
+    if(mime.indexOf(kind+'/')!==0)throw new Error('That file type is not supported.');
+    var ext=EXT[mime]||((/\.([a-z0-9]{1,5})$/i.exec(origName)||[])[1]||'bin').toLowerCase();
+    path=S.me.id+'/'+rand(12)+'.'+ext;
+    await xhrUpload(path,file,mime,p.set);
+    var name=kind==='image'&&file.name?cleanName(file.name):origName;
+    var r=await S.sb.from('messages').insert({kind:kind,body:caption,media_path:path,media_name:name,media_mime:mime,media_size:file.size,media_dur:Math.round(opts.dur||0),voice:!!opts.voice}).select().single();
+    if(r.error){S.sb.storage.from(BUCKET).remove([path]).then(function(){},function(){});throw r.error;}
+    if(caption){ta.value='';autosize();toggleSend();}
+    p.remove();p=null;
+    queueRow(r.data);
+  }catch(e){
+    if(p)p.remove();
+    await afterSendError(e);
+  }
+}
+
+/* ---------------- voice recording ---------------- */
+var rec=null;
+function showComposer(){$('recbar').hidden=true;$('composer').hidden=false;}
+$('btnMic').onclick=function(){
+  if(!navigator.mediaDevices||!window.MediaRecorder){toast('Voice recording is not supported here. Use + then Audio file.',true);return;}
+  if(!window.isSecureContext){toast('Voice recording needs HTTPS. You can still send an audio file.',true);return;}
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    var types=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus'],mime='',i;
+    for(i=0;i<types.length;i++){if(MediaRecorder.isTypeSupported(types[i])){mime=types[i];break;}}
+    var mr=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream);
+    var chunks=[],t0=Date.now();
+    var r={mr:mr,cancel:false,timer:null};rec=r;
+    mr.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data);};
+    mr.onstop=function(){
+      stream.getTracks().forEach(function(t){t.stop();});
+      clearInterval(r.timer);showComposer();rec=null;
+      if(r.cancel)return;
+      var type=String(mr.mimeType||mime||'audio/webm').split(';')[0];
+      var blob=new Blob(chunks,{type:type});
+      var dur=Math.round((Date.now()-t0)/1000);
+      if(dur<1||blob.size<500){toast('Recording was too short.');return;}
+      blob.name='voice-message';
+      uploadFile(blob,'audio',{voice:true,dur:dur});
+    };
+    mr.start(250);
+    $('composer').hidden=true;$('recbar').hidden=false;$('recTime').textContent='0:00';
+    r.timer=setInterval(function(){
+      var s=Math.round((Date.now()-t0)/1000);$('recTime').textContent=fmtDur(s);
+      if(s>=300)mr.stop();
+    },500);
+  }).catch(function(){toast('Microphone permission was denied.',true);});
+};
+$('recCancel').onclick=function(){if(rec){rec.cancel=true;rec.mr.stop();}};
+$('recSend').onclick=function(){if(rec)rec.mr.stop();};
+
+/* ---------------- image viewer ---------------- */
+function openViewer(url){$('viewer').firstElementChild.src=url;$('viewer').hidden=false;}
+$('viewer').onclick=function(){$('viewer').hidden=true;};
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){$('viewer').hidden=true;if(S.me)$('panel').hidden=true;}});
+
+/* ---------------- members / admin panel ---------------- */
+function openPanel(tab){S.tab=tab||'members';$('panel').hidden=false;renderPanel();loadMembers();}
+$('btnMembers').onclick=function(){openPanel('members');};
+$('pClose').onclick=function(){$('panel').hidden=true;};
+$('panel').addEventListener('click',function(e){if(e.target===$('panel'))$('panel').hidden=true;});
+$('btnLogout').onclick=async function(){
+  if(!confirm('Sign out?'))return;
+  S.me=null;
+  try{await S.sb.auth.signOut();}catch(e){}
+  showAuth('');
+};
+
+function renderPanel(){
+  var tabs=$('pTabs');tabs.textContent='';
+  var list=[['members','Members']];
+  if(S.me.role==='admin')list.push(['admin','Admin']);
+  list.forEach(function(t){
+    var b=h('button',S.tab===t[0]?'on':'',t[1]);
+    b.onclick=function(){S.tab=t[0];renderPanel();};
+    tabs.appendChild(b);
+  });
+  var body=$('pBody');body.textContent='';
+  if(S.tab==='admin'&&S.me.role==='admin')renderAdmin(body);else renderMembers(body);
+}
+
+function renderMembers(body){
+  var on={};S.online.forEach(function(id){on[id]=true;});
+  var arr=S.members.slice().sort(function(a,b){return (on[b.id]?1:0)-(on[a.id]?1:0)||a.name.localeCompare(b.name);});
+  arr.forEach(function(m){
+    var r=h('div','mem');
+    var av=h('div','av',initial(m.name));av.style.background='hsl('+hue(m.username)+',55%,46%)';
+    var wh=h('div','who'),b=h('b',null,m.name+(m.id===S.me.id?' (you)':''));
+    if(m.role==='admin')b.appendChild(h('span','badge','admin'));
+    wh.appendChild(b);wh.appendChild(h('small',null,'@'+m.username));
+    r.appendChild(av);r.appendChild(wh);r.appendChild(h('span','dotg'+(on[m.id]?' on':'')));
+    body.appendChild(r);
+  });
+  var pw=h('div','pwrow'),btn=h('button','linkbtn','Change my password');
+  btn.onclick=async function(){
+    var np=prompt('New password (at least 6 characters):');
+    if(np==null)return;
+    if(np.length<6){toast('Password must be at least 6 characters.',true);return;}
+    var r=await S.sb.auth.updateUser({password:np});
+    if(r.error)toast(friendly(r.error),true);else toast('Password changed.');
+  };
+  pw.appendChild(btn);body.appendChild(pw);
+}
+
+function csvCell(v){var s=String(v==null?'':v);if(/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}
+function isoDate(t){return t?new Date(t).toISOString():'';}
+function downloadCsv(users){
+  var head=['id','username','name','email','phone','role','joined','last_login','login_count','messages','status'];
+  var rows=users.map(function(u){return [u.id,u.username,u.name,u.email,u.phone,u.role,isoDate(u.joined_at),isoDate(u.last_login_at),u.login_count,u.message_count,u.banned?'suspended':'active'];});
+  var csv='﻿'+[head].concat(rows).map(function(r){return r.map(csvCell).join(',');}).join('\r\n')+'\r\n';
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='chat-users.csv';document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1500);
+}
+
+async function renderAdmin(body){
+  body.appendChild(h('p','fine','Loading…'));
+  var r=await S.sb.rpc('admin_users');
+  if(S.tab!=='admin'||$('panel').hidden)return;
+  body.textContent='';
+  if(r.error){body.appendChild(h('p','err',friendly(r.error)));return;}
+  var users=r.data||[],total=users.reduce(function(a,u){return a+Number(u.message_count||0);},0);
+  var on={};S.online.forEach(function(id){on[id]=true;});
+  body.appendChild(h('p','fine',users.length+' registered users • '+total+' messages stored'));
+  var dl=h('button','dl','⬇ Download all user data (CSV)');dl.onclick=function(){downloadCsv(users);};
+  body.appendChild(dl);
+  users.forEach(function(u){
+    var c=h('div','ucard'),top=h('div','row1'),nm=h('b',null,u.name);
+    if(u.role==='admin')nm.appendChild(h('span','badge','admin'));
+    if(u.banned)nm.appendChild(h('span','badge red','suspended'));
+    top.appendChild(nm);top.appendChild(h('span','dotg'+(on[u.id]?' on':'')));c.appendChild(top);
+    var dlist=document.createElement('dl');
+    [['Username','@'+u.username],['Email',u.email],['Phone',u.phone||'-'],['Joined',fmtDate(u.joined_at)],['Last login',fmtDate(u.last_login_at)],['Logins',String(u.login_count)],['Messages',String(u.message_count)]].forEach(function(p){
+      dlist.appendChild(h('dt',null,p[0]));dlist.appendChild(h('dd',null,p[1]));
+    });
+    c.appendChild(dlist);
+    if(u.role!=='admin'){
+      var b=h('button',u.banned?'':'danger',u.banned?'Restore account':'Suspend account');
+      b.onclick=async function(){
+        if(!u.banned&&!confirm('Suspend '+u.name+'? They will no longer be able to read or send messages.'))return;
+        var rr=await S.sb.rpc('admin_set_banned',{uid:u.id,flag:!u.banned});
+        if(rr.error)toast(friendly(rr.error),true);else{renderPanel();loadMembers();}
+      };
+      c.appendChild(b);
+    }
+    body.appendChild(c);
+  });
+}
+
+/* ---------------- start ---------------- */
+function configured(){
+  var u=String(CFG.SUPABASE_URL||''),k=String(CFG.SUPABASE_KEY||'');
+  return /^https?:\/\/[^\s]+/.test(u)&&u.indexOf('PASTE')<0&&k.length>20&&k.indexOf('PASTE')<0;
+}
+async function boot(){
+  document.title=GROUP;$('gName').textContent=GROUP;
+  if(!configured()){showSetup('config');return;}
+  if(!window.supabase||!window.supabase.createClient){fatal('Could not load the Supabase library. Check your internet connection and refresh the page.');return;}
+  S.sb=window.supabase.createClient(String(CFG.SUPABASE_URL).replace(/\/+$/,''),CFG.SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+  S.sb.auth.onAuthStateChange(function(ev){if(ev==='SIGNED_OUT'&&S.me)showAuth('You have been signed out.');});
+  var st=await S.sb.rpc('app_status');
+  if(st.error){
+    if(isMissingFn(st.error)){showSetup('sql');return;}
+    if(/invalid api key|apikey/i.test(st.error.message||''))fatal('Supabase rejected the key. Check SUPABASE_URL and SUPABASE_KEY at the top of this file.');
+    else fatal(friendly(st.error));
+    return;
+  }
+  S.status=st.data||{};
+  var s=await S.sb.auth.getSession();
+  if(s.data&&s.data.session){
+    try{await enterApp(false);return;}
+    catch(e){/* fall through to the sign in screen */}
+  }
+  showAuth('');
+}
+boot().catch(function(e){fatal(friendly(e));});
+})();
+</script>
+</body>
+</html>
